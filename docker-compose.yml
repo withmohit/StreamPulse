@@ -1,0 +1,6 @@
+# docker-compose.yml skeleton to get right
+services:
+  zookeeper:
+  kafka:
+  postgres:
+  redis:

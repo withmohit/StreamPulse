@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS events (
+    id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    type TEXT NOT NULL,
+    value DOUBLE PRECISION NOT NULL,
+    timestamp TIMESTAMPTZ NOT NULL
+);
