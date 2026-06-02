@@ -1,0 +1,13 @@
+.git
+.env
+.venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+dashboard/node_modules
+dashboard/dist
+dashboard/.vite
+docs/
+*.md
