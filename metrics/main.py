@@ -23,6 +23,7 @@ import redis as redis_lib
 import structlog
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
@@ -116,6 +117,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="StreamPulse Metrics", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],   # Vite dev server
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 
 
 # ------------------------------------------------------------------ #
