@@ -15,7 +15,8 @@ dependencies = [
     "structlog (>=25.5.0,<26.0.0)",
     "slowapi (>=0.1.9,<0.2.0)",
     "python-dotenv (>=1.2.2,<2.0.0)",
-    "uvicorn (>=0.47.0,<0.48.0)"
+    "uvicorn (>=0.47.0,<0.48.0)",
+    "requests (>=2.34.2,<3.0.0)"
 ]
 
 [tool.poetry]
