@@ -60,67 +60,46 @@ def health():
 
 
 @app.post("/ingest", response_model=IngestResponse)
-@limiter.limit("200/minute")   # 200 events/min per IP
-async def ingest_event(request: Request, event: EventPayload):
+@limiter.limit("200/minute")
+async def ingest_event(request: Request):
     """
-    Main ingest endpoint.
+    Single ingest endpoint — server decides the routing.
     Valid events   → events topic (keyed by tenant_id)
-    Invalid events → caught by Pydantic before reaching here → 422
+    Invalid events → events.dlq topic (preserved for reprocessing)
     """
-    topic = os.getenv("KAFKA_TOPIC_EVENTS", "events")
+    body = await request.json()
 
     try:
-        event_id = send_event(
-            topic=topic,
-            event=event.model_dump(mode="json"),
-            key=event.tenant_id   # partition by tenant
-        )
+        event = EventPayload(**body)
+        topic = os.getenv("KAFKA_TOPIC_EVENTS", "events")
+        event_id = send_event(topic, event.model_dump(mode="json"), key=event.tenant_id)
         log.info("event_accepted",
             event_id=event_id,
             event_type=event.event_type,
             tenant_id=event.tenant_id
         )
-        return IngestResponse(
-            event_id=event_id,
-            status="accepted",
-            message="Event queued for processing"
-        )
-    except Exception as e:
-        log.error("event_routing_failed", error=str(e))
-        raise HTTPException(status_code=503, detail="Pipeline unavailable")
+        return IngestResponse(event_id=event_id, status="accepted", message="Event queued for processing")
 
-
-@app.post("/ingest/raw")
-@limiter.limit("200/minute")
-async def ingest_raw(request: Request):
-    """
-    Fallback endpoint — accepts anything, sends malformed to DLQ.
-    Use this to test your DLQ pipeline explicitly.
-    """
-    dlq_topic = os.getenv("KAFKA_TOPIC_DLQ", "events.dlq")
-    body = await request.json()
-
-    try:
-        # Try to validate
-        event = EventPayload(**body)
-        topic = os.getenv("KAFKA_TOPIC_EVENTS", "events")
-        event_id = send_event(topic, event.model_dump(mode="json"), key=event.tenant_id)
-        return IngestResponse(event_id=event_id, status="accepted", message="Valid event queued")
+    except HTTPException:
+        raise  # re-raise 503s from send_event
 
     except Exception as validation_error:
-        # Invalid — route to DLQ with reason
+        dlq_topic = os.getenv("KAFKA_TOPIC_DLQ", "events.dlq")
         dlq_payload = {
             "raw": body,
             "failure_reason": str(validation_error),
-            "source": "ingest_raw"
         }
-        event_id = send_event(dlq_topic, dlq_payload, key=None)
-        log.warning("event_sent_to_dlq",
-            event_id=event_id,
-            reason=str(validation_error)[:200]
-        )
-        return IngestResponse(
-            event_id=event_id,
-            status="rejected",
-            message=f"Validation failed: {str(validation_error)[:100]}"
-        )
+        try:
+            event_id = send_event(dlq_topic, dlq_payload, key=None)
+            log.warning("event_sent_to_dlq",
+                event_id=event_id,
+                reason=str(validation_error)[:200]
+            )
+            return IngestResponse(
+                event_id=event_id,
+                status="rejected",
+                message=f"Validation failed: {str(validation_error)[:100]}"
+            )
+        except Exception as e:
+            log.error("dlq_routing_failed", error=str(e))
+            raise HTTPException(status_code=503, detail="Pipeline unavailable")
